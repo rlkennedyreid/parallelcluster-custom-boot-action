@@ -25,22 +25,30 @@ rm /var/spool/slurm.state/*
 #####
 yum install -y epel-release
 yum-config-manager --enable epel
+# Slurm build deps
 yum install -y libyaml-devel libjwt-devel http-parser-devel json-c-devel
-
-
-# cat > /etc/ld.so.conf.d/slurmrestd.conf <<EOF
-# /usr/local/lib
-# /usr/local/lib64
-# EOF
+# Pyenv build deps
+yum install -y gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
+yum clean all
+rm -rf /var/cache/yum
 
 #####
 # Update slurm, with slurmrestd
 #####
 
 # Python3 is requred to build slurm >= 20.02,
-. /opt/parallelcluster/pyenv/versions/cookbook_virtualenv/bin/activate
+export PYENV_ROOT=/opt/parallelcluster/pyenv
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init --path)"
+pyenv install -s 3.7.13
 
-cd /shared
+pushd /shared
+
+$PYENV_ROOT/versions/3.7.13/bin/python -m venv --upgrade-deps .venv
+
+. .venv/bin/activate
+
+
 # have to use the exact same slurm version as in the released version of ParallelCluster2.10.1 - 20.02.4
 # as of May 13, 20.02.4 was removed from schedmd and was replaced with .7
 # error could be seen in the cfn-init.log file
@@ -49,7 +57,8 @@ cd /shared
 # slurm_version=20.11.8
 wget https://download.schedmd.com/slurm/slurm-${slurm_version}.tar.bz2
 tar xjf slurm-${slurm_version}.tar.bz2
-cd slurm-${slurm_version}
+pushd slurm-${slurm_version}
+
 
 CORES=$(grep processor /proc/cpuinfo | wc -l)
 # config and build slurm
@@ -59,22 +68,25 @@ make install
 make install-contrib
 deactivate
 
+popd && rm -rf slurm-${slurm_version} .venv
+
+
 # set the jwt key
-
-jwt_key_dir=/var/spool/slurm.state
-jwt_key_file=$jwt_key_dir/jwt_hs256.key
-
 if [ ${slurm_jwt_key} ]
 then
-    mkdir -p $jwt_key_dir
     echo "- JWT secret variable found, writing..."
+
+    jwt_key_dir=/var/spool/slurm.state
+    jwt_key_file=$jwt_key_dir/jwt_hs256.key
+    mkdir -p $jwt_key_dir
+
     echo -n ${slurm_jwt_key} > ${jwt_key_file}
 else
     echo "Error: JWT key not present in environment - aborting cluster deployment" >&2
     exit 1
 fi
 
-chown slurm $jwt_key_file
+chown slurm:slurm $jwt_key_file
 chmod 0600 $jwt_key_file
 
 # add 'AuthAltTypes=auth/jwt' to slurm.conf
