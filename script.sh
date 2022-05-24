@@ -27,12 +27,11 @@ yum install -y epel-release
 yum-config-manager --enable epel
 yum install -y libyaml-devel libjwt-devel http-parser-devel json-c-devel
 
-# update the linked libs
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
-cat > /etc/ld.so.conf.d/slurmrestd.conf <<EOF
-/usr/local/lib
-/usr/local/lib64
-EOF
+
+# cat > /etc/ld.so.conf.d/slurmrestd.conf <<EOF
+# /usr/local/lib
+# /usr/local/lib64
+# EOF
 
 #####
 # Update slurm, with slurmrestd
