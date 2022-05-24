@@ -44,7 +44,7 @@ pyenv install -s 3.7.13
 
 pushd /shared
 
-$PYENV_ROOT/versions/3.7.13/bin/python -m venv --upgrade-deps .venv
+$PYENV_ROOT/versions/3.7.13/bin/python -m venv .venv
 
 . .venv/bin/activate
 
