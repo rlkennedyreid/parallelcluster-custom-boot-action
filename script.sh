@@ -136,7 +136,7 @@ PidFile=/var/run/slurmdbd.pid
 StorageType=accounting_storage/mysql
 StorageUser=${slurmdbd_user}
 StoragePass=${slurmdbd_password}
-StorageHost=${localhost}
+StorageHost=localhost
 AuthAltTypes=auth/jwt
 AuthAltParameters=jwt_key=${jwt_key_file}
 EOF
