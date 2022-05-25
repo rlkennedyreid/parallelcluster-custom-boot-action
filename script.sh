@@ -26,7 +26,7 @@ rm /var/spool/slurm.state/*
 #install pre-requisites
 #####
 # MariaDB repository setup
-curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --skip-maxscale --skip-tools
+curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --os-type=rhel --os-version=7 --skip-maxscale --skip-tools
 yum clean all
 
 yum install -y epel-release
