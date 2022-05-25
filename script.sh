@@ -15,6 +15,8 @@ fi
 #####
 slurm_version="$1"
 slurm_jwt_key="$2"
+slurmdbd_user="slurm"
+slurmdbd_password="password"
 
 yum update -y
 
@@ -23,14 +25,30 @@ rm /var/spool/slurm.state/*
 #####
 #install pre-requisites
 #####
+# MariaDB repository setup
+curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --skip-maxscale --skip-tools
+yum clean all
+
 yum install -y epel-release
 yum-config-manager --enable epel
 # Slurm build deps
 yum install -y libyaml-devel libjwt-devel http-parser-devel json-c-devel
 # Pyenv build deps
 yum install -y gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
+# mariadb
+yum -y install MariaDB-server
 yum clean all
 rm -rf /var/cache/yum
+
+#####
+#set up database
+#####
+
+systemctl enable mariadb.service
+systemctl start mariadb.service
+
+mysql --wait -e "CREATE USER '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}'"
+mysql --wait -e "GRANT ALL ON *.* to '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}' with GRANT option"
 
 #####
 # Update slurm, with slurmrestd
@@ -70,14 +88,14 @@ deactivate
 
 popd && rm -rf slurm-${slurm_version} .venv
 
+jwt_key_dir=/var/spool/slurm.state
+jwt_key_file=$jwt_key_dir/jwt_hs256.key
 
 # set the jwt key
 if [ ${slurm_jwt_key} ]
 then
     echo "- JWT secret variable found, writing..."
 
-    jwt_key_dir=/var/spool/slurm.state
-    jwt_key_file=$jwt_key_dir/jwt_hs256.key
     mkdir -p $jwt_key_dir
 
     echo -n ${slurm_jwt_key} > ${jwt_key_file}
@@ -89,17 +107,42 @@ fi
 chown slurm:slurm $jwt_key_file
 chmod 0600 $jwt_key_file
 
-# add 'AuthAltTypes=auth/jwt' to slurm.conf
+# add JWT auth and accounting config to slurm.conf
 cat >> /opt/slurm/etc/slurm.conf <<EOF
 # Enable jwt auth for Slurmrestd
 AuthAltTypes=auth/jwt
+
+# ACCOUNTING
+JobAcctGatherType=jobacct_gather/linux
+JobAcctGatherFrequency=30
+AccountingStorageType=accounting_storage/slurmdbd
 EOF
 
 # create the slurmrestd.conf file
-cat >/opt/slurm/etc/slurmrestd.conf<<EOF
+# this file can be owned by root, because the slurmrestd service is run by root
+cat > /opt/slurm/etc/slurmrestd.conf <<EOF
 include /opt/slurm/etc/slurm.conf
 AuthType=auth/jwt
 EOF
+
+# create the slurmdbd.conf file
+cat > /opt/slurm/etc/slurmdbd.conf <<EOF
+AuthType=auth/munge
+DbdHost=localhost
+DebugLevel=info
+SlurmUser=slurm
+LogFile=/var/log/slurmdbd.log
+PidFile=/var/run/slurmdbd.pid
+StorageType=accounting_storage/mysql
+StorageUser=${slurmdbd_user}
+StoragePass=${slurmdbd_password}
+StorageHost=${localhost}
+AuthAltTypes=auth/jwt
+AuthAltParameters=jwt_key=${jwt_key_file}
+EOF
+
+chown slurm:slurm /opt/slurm/etc/slurmdbd.conf
+chmod 600 /opt/slurm/etc/slurmdbd.conf
 
 
 #####
@@ -123,15 +166,14 @@ PIDFile=/var/run/slurmrestd.pid
 WantedBy=multi-user.target
 EOF
 
+# start slurmdbd
+/opt/slurm/sbin/slurmdbd
 
-##### restart the daemon and start the slurmrestd
+# restart the daemon and start the slurmrestd. must be done after slurmdbd start,
+# otherwise the cluster won't register
 systemctl daemon-reload
 systemctl start slurmrestd
 systemctl restart slurmctld
 
-
-#####
-# we will be using /shared/tmp for running our program nad store the output files.
-#####
 mkdir -p /shared/tmp
 chown slurm:slurm /shared/tmp
