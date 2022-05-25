@@ -18,6 +18,11 @@ slurm_jwt_key="$2"
 slurmdbd_user="slurm"
 slurmdbd_password="password"
 
+
+systemctl stop slurmctld
+
+useradd --system --no-create-home -c "slurm rest daemon user" slurmrestd
+
 yum update -y
 
 rm /var/spool/slurm.state/*
@@ -159,7 +164,7 @@ ConditionPathExists=/opt/slurm/etc/slurmrestd.conf
 
 [Service]
 Environment=SLURM_CONF=/opt/slurm/etc/slurmrestd.conf
-ExecStart=/opt/slurm/sbin/slurmrestd -vvvv 0.0.0.0:8082 -u slurm
+ExecStart=/opt/slurm/sbin/slurmrestd -a rest_auth/jwt -s openapi/v0.0.37 -u slurmrestd -g slurmrestd -vvvv 0.0.0.0:8082
 PIDFile=/var/run/slurmrestd.pid
 
 [Install]
@@ -173,7 +178,7 @@ EOF
 # otherwise the cluster won't register
 systemctl daemon-reload
 systemctl start slurmrestd
-systemctl restart slurmctld
+systemctl start slurmctld
 
 mkdir -p /shared/tmp
 chown slurm:slurm /shared/tmp
