@@ -214,4 +214,4 @@ chown slurm:slurm /shared/tmp
 pushd /shared/tmp
 git clone -b dev --depth 1 https://${machine_user_token}@github.com/Perpetual-Labs/uqle.git ./uqle
 pushd uqle
-UQLE_CLI_TAG=${cli_tag} UQLE_CLI_TOKEN=${machine_user_token} docker-compose --file ./docker-compose
+UQLE_CLI_TAG=${cli_tag} UQLE_CLI_TOKEN=${machine_user_token} UQLE_API_HOST=${uqle_api_host} docker-compose --file ./docker-compose-gitlab-runner.yml
