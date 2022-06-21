@@ -15,6 +15,11 @@ fi
 #####
 slurm_version="$1"
 slurm_jwt_key="$2"
+# GitHub release tag for UQLE CLI tool
+cli_tag="$3"
+# GitHub OAuth token - should have read access to UQLE CLI releases, and the UQLE stack repository
+machine_user_token="$4"
+uqle_api_host="http://10.0.0.18:2323"
 slurmdbd_user="slurm"
 slurmdbd_password="password"
 
@@ -42,11 +47,16 @@ yum install -y libyaml-devel libjwt-devel http-parser-devel json-c-devel
 yum install -y gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
 # mariadb
 yum -y install MariaDB-server
+# docker
+yum install docker containerd
+# Install go-task, see https://taskfile.dev/install.sh
+sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+# cleanup
 yum clean all
 rm -rf /var/cache/yum
 
 #####
-#set up database
+# set up database
 #####
 
 systemctl enable mariadb.service
@@ -54,6 +64,24 @@ systemctl start mariadb.service
 
 mysql --wait -e "CREATE USER '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}'"
 mysql --wait -e "GRANT ALL ON *.* to '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}' with GRANT option"
+
+#####
+# set up docker
+#####
+
+DOCKER_PLUGINS=/usr/local/lib/docker/cli-plugins
+COMPOSE_BINARY_URL=https://github.com/docker/compose/releases/download/v2.6.0/docker-compose-linux-x86_64
+
+# Install docker-compose and make accessible as a cli plugin and a standalone command
+mkdir -p ${DOCKER_PLUGINS}
+curl -SL ${COMPOSE_BINARY_URL} -o ${DOCKER_PLUGINS}/docker-compose
+chmod +x ${DOCKER_PLUGINS}/docker-compose
+sudo ln -s ${DOCKER_PLUGINS}/docker-compose /usr/local/bin/docker-compose
+
+unset DOCKER_PLUGINS COMPOSE_BINARY_URL
+
+systemctl enable docker.service
+systemctl start docker.service
 
 #####
 # Update slurm, with slurmrestd
@@ -182,3 +210,8 @@ systemctl start slurmctld
 
 mkdir -p /shared/tmp
 chown slurm:slurm /shared/tmp
+
+pushd /shared/tmp
+git clone -b dev --depth 1 https://${machine_user_token}@github.com/Perpetual-Labs/uqle.git ./uqle
+pushd uqle
+UQLE_CLI_TAG=${cli_tag} UQLE_CLI_TOKEN=${machine_user_token} docker-compose --file ./docker-compose
