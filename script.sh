@@ -28,7 +28,7 @@ systemctl stop slurmctld
 
 useradd --system --no-create-home -c "slurm rest daemon user" slurmrestd
 
-yum update -y
+yum -y update
 
 rm /var/spool/slurm.state/*
 
@@ -37,22 +37,22 @@ rm /var/spool/slurm.state/*
 #####
 # MariaDB repository setup
 curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --os-type=rhel --os-version=7 --skip-maxscale --skip-tools
-yum clean all
+yum -y clean all
 
-yum install -y epel-release
-yum-config-manager --enable epel
+yum -y install -y epel-release
+yum-config-manager -y --enable epel
 # Slurm build deps
-yum install -y libyaml-devel libjwt-devel http-parser-devel json-c-devel
+yum -y install libyaml-devel libjwt-devel http-parser-devel json-c-devel
 # Pyenv build deps
-yum install -y gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
+yum -y install gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
 # mariadb
 yum -y install MariaDB-server
 # docker
-yum install docker containerd
+yum -y install docker containerd
 # Install go-task, see https://taskfile.dev/install.sh
 sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 # cleanup
-yum clean all
+yum -y clean all
 rm -rf /var/cache/yum
 
 #####
