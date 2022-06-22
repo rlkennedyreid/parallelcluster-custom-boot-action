@@ -3,13 +3,6 @@
 # https://gist.github.com/mohanpedala/1e2ff5661761d3abd0385e8223e16425#file-bash_strict_mode-md
 set -euxo pipefail
 
-. "/etc/parallelcluster/cfnconfig"
-
-if [[ "${cfn_node_type}" != "HeadNode" ]]; then
-  echo "ERROR: Node type is not HeadNode. Node type: ${cfn_node_type}"
-  exit 1
-fi
-
 #####
 # Script arguments
 #####
@@ -36,11 +29,14 @@ EOF
 
 }
 
-function compute_node_config() {
+function compute_node_action() {
+    echo "Running compute node boot action"
     modify_slurm_conf
 }
 
-function head_node_config() {
+function head_node_action() {
+    echo "Running head node boot action"
+
     systemctl stop slurmctld
 
     useradd --system --no-create-home -c "slurm rest daemon user" slurmrestd
@@ -240,3 +236,13 @@ EOF
     UQLE_CLI_TAG=${cli_tag} UQLE_CLI_TOKEN=${machine_user_token} UQLE_API_HOST=${uqle_api_host} docker-compose --file ./docker-compose-gitlab-runner.yml up --detach --build
 
 }
+
+. "/etc/parallelcluster/cfnconfig"
+
+echo "Node type: ${cfn_node_type}"
+
+if [[ "${cfn_node_type}" == "HeadNode" ]]; then
+    head_node_action
+elif [[ "${cfn_node_type}" == "ComputeFleet" ]]; then
+    compute_node_action
+fi
