@@ -187,7 +187,8 @@ chmod 600 /opt/slurm/etc/slurmdbd.conf
 cat >/etc/systemd/system/slurmrestd.service<<EOF
 [Unit]
 Description=Slurm restd daemon
-After=network.target slurmctl.service
+After=network.target slurmctld.service
+Requires=slurmctld.service
 ConditionPathExists=/opt/slurm/etc/slurmrestd.conf
 
 [Service]
@@ -199,19 +200,34 @@ PIDFile=/var/run/slurmrestd.pid
 WantedBy=multi-user.target
 EOF
 
-# start slurmdbd
-/opt/slurm/sbin/slurmdbd
+cat >/etc/systemd/system/slurmdbd.service<<EOF
+[Unit]
+Description=Slurm database daemon
+After=network.target
+Before=slurmctld.service
+ConditionPathExists=/opt/slurm/etc/slurmdbd.conf
+
+[Service]
+Environment=SLURM_CONF=/opt/slurm/etc/slurmdbd.conf
+ExecStart=/opt/slurm/sbin/slurmdbd
+PIDFile=/var/run/slurmdbd.pid
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=slurmctld.service
+EOF
+
 
 # restart the daemon and start the slurmrestd. must be done after slurmdbd start,
 # otherwise the cluster won't register
 systemctl daemon-reload
-systemctl start slurmrestd
-systemctl start slurmctld
+systemctl enable slurmrestd.service slurmdbd.service
+systemctl start slurmrestd.service slurmdbd.service slurmctld.service
 
 mkdir -p /shared/tmp
 chown slurm:slurm /shared/tmp
 
-pushd /shared/tmp
+pushd /tmp
 git clone -b dev --depth 1 https://${machine_user_token}@github.com/Perpetual-Labs/uqle.git ./uqle
 pushd uqle
 
