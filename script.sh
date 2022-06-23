@@ -214,8 +214,7 @@ Environment=SLURM_CONF=/opt/slurm/etc/slurmdbd.conf
 ExecStart=/opt/slurm/sbin/slurmdbd
 
 [Install]
-WantedBy=multi-user.target
-RequiredBy=slurmctld.service
+WantedBy=multi-user.target slurmctld.service
 EOF
 
 
