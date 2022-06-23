@@ -24,6 +24,7 @@ slurmdbd_password="password"
 function modify_slurm_conf() {
     # add JWT auth and accounting config to slurm.conf
     cat >> /opt/slurm/etc/slurm.conf <<EOF
+
 # Enable jwt auth for Slurmrestd
 AuthAltTypes=auth/jwt
 
@@ -34,11 +35,11 @@ EOF
 
 }
 function install_docker() {
-    yum -y install docker containerd
+    yum -y -q install docker containerd
 }
 
 function yum_cleanup() {
-    yum -y clean all
+    yum -y -q clean all
     rm -rf /var/cache/yum
 }
 
@@ -48,16 +49,16 @@ function install_head_node_dependencies() {
 
     yum_cleanup
 
-    yum -y update
+    yum -y -q update
 
-    yum -y install -y epel-release
+    yum -y -q install -y epel-release
     yum-config-manager -y --enable epel
     # Slurm build deps
-    yum -y install libyaml-devel libjwt-devel http-parser-devel json-c-devel
+    yum -y -q install libyaml-devel libjwt-devel http-parser-devel json-c-devel
     # Pyenv build deps
-    yum -y install gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
+    yum -y -q install gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
     # mariadb
-    yum -y install MariaDB-server
+    yum -y -q install MariaDB-server
 
     install_docker
 
@@ -70,7 +71,7 @@ function install_head_node_dependencies() {
 function install_compute_node_dependencies() {
     yum_cleanup
 
-    yum -y update
+    yum -y -q update
 
     install_docker
 
@@ -124,10 +125,10 @@ function rebuild_slurm() {
     CORES=$(grep processor /proc/cpuinfo | wc -l)
 
     # configure and build slurm
-    ./configure --prefix=/opt/slurm --with-pmix=/opt/pmix --enable-slurmrestd
-    make -j $CORES
-    make install
-    make install-contrib
+    ./configure --silent --prefix=/opt/slurm --with-pmix=/opt/pmix --enable-slurmrestd
+    make -j $CORES -s
+    make -s install
+    make -s install-contrib
     deactivate
 
     popd && rm -rf slurm-${slurm_version} .venv
@@ -233,7 +234,6 @@ function install_and_run_gitlab_runner() {
 
     docker network create uqle_network
     UQLE_CLI_TAG=${cli_tag} UQLE_CLI_TOKEN=${machine_user_token} UQLE_API_HOST=${uqle_api_host} docker-compose --file ./docker-compose-gitlab-runner.yml up --detach --build
-
 }
 
 function head_node_action() {
