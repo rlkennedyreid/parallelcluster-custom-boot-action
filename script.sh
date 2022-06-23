@@ -21,25 +21,32 @@ uqle_api_host="http://10.0.0.18:2323"
 slurmdbd_user="slurm"
 slurmdbd_password="password"
 
+function configure_yum() {
+    cat >> /etc/yum.conf <<EOF
+assumeyes=1
+clean_requirements_on_remove=1
+EOF
+}
+
 function modify_slurm_conf() {
     # add JWT auth and accounting config to slurm.conf
-    cat >> /opt/slurm/etc/slurm.conf <<EOF
+    # /opt/slurm is shared via nfs, so this only needs to be configured on head node
 
+    cat >> /opt/slurm/etc/slurm.conf <<EOF
 # Enable jwt auth for Slurmrestd
 AuthAltTypes=auth/jwt
-
 # ACCOUNTING
 JobAcctGatherType=jobacct_gather/linux
 AccountingStorageType=accounting_storage/slurmdbd
 EOF
-
 }
+
 function install_docker() {
-    yum -y -q install docker containerd
+    yum -q install docker containerd
 }
 
 function yum_cleanup() {
-    yum -y -q clean all
+    yum -q clean all
     rm -rf /var/cache/yum
 }
 
@@ -49,16 +56,16 @@ function install_head_node_dependencies() {
 
     yum_cleanup
 
-    yum -y -q update
+    yum -q update
 
-    yum -y -q install -y epel-release
+    yum -q install -y epel-release
     yum-config-manager -y --enable epel
     # Slurm build deps
-    yum -y -q install libyaml-devel libjwt-devel http-parser-devel json-c-devel
+    yum -q install libyaml-devel libjwt-devel http-parser-devel json-c-devel
     # Pyenv build deps
-    yum -y -q install gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
+    yum -q install gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
     # mariadb
-    yum -y -q install MariaDB-server
+    yum -q install MariaDB-server
 
     install_docker
 
@@ -71,7 +78,7 @@ function install_head_node_dependencies() {
 function install_compute_node_dependencies() {
     yum_cleanup
 
-    yum -y -q update
+    yum -q update
 
     install_docker
 
@@ -81,6 +88,8 @@ function install_compute_node_dependencies() {
 function configure_slurm_database() {
     systemctl enable mariadb.service
     systemctl start mariadb.service
+
+    mysqld_safe --innodb-lock-wait-timeout=900
 
     mysql --wait -e "CREATE USER '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}'"
     mysql --wait -e "GRANT ALL ON *.* to '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}' with GRANT option"
@@ -122,13 +131,12 @@ function rebuild_slurm() {
     pushd slurm-${slurm_version}
 
 
-    CORES=$(grep processor /proc/cpuinfo | wc -l)
-
     # configure and build slurm
     ./configure --silent --prefix=/opt/slurm --with-pmix=/opt/pmix --enable-slurmrestd
-    make -j $CORES -s
+    make -s -j
     make -s install
     make -s install-contrib
+
     deactivate
 
     popd && rm -rf slurm-${slurm_version} .venv
@@ -153,7 +161,6 @@ function write_jwt_key_file() {
 }
 
 function create_slurmrest_conf() {
-
     # create the slurmrestd.conf file
     # this file can be owned by root, because the slurmrestd service is run by root
     cat > /opt/slurm/etc/slurmrestd.conf <<EOF
@@ -241,6 +248,8 @@ function head_node_action() {
 
     systemctl stop slurmctld.service
 
+    configure_yum
+
     install_head_node_dependencies
 
     configure_slurm_database
@@ -273,7 +282,7 @@ function compute_node_action() {
     echo "Running compute node boot action"
     systemctl stop slurmd.service
 
-    modify_slurm_conf
+    configure_yum
 
     install_compute_node_dependencies
 
