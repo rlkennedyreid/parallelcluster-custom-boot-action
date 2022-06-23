@@ -86,10 +86,13 @@ function install_compute_node_dependencies() {
 }
 
 function configure_slurm_database() {
+    cat > /etc/my.cnf.d/slurmdbd.conf <<EOF
+[mariadb]
+innodb_lock_wait_timeout=900
+EOF
+
     systemctl enable mariadb.service
     systemctl start mariadb.service
-
-    mysqld_safe --innodb-lock-wait-timeout=900
 
     mysql --wait -e "CREATE USER '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}'"
     mysql --wait -e "GRANT ALL ON *.* to '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}' with GRANT option"
@@ -202,7 +205,7 @@ ConditionPathExists=/opt/slurm/etc/slurmrestd.conf
 
 [Service]
 Environment=SLURM_CONF=/opt/slurm/etc/slurmrestd.conf
-ExecStart=/opt/slurm/sbin/slurmrestd -a rest_auth/jwt -s openapi/v0.0.37 -u slurmrestd -g slurmrestd -vvvv 0.0.0.0:8082
+ExecStart=/opt/slurm/sbin/slurmrestd -a rest_auth/jwt -s openapi/v0.0.37 -u slurmrestd -g slurmrestd 0.0.0.0:8082
 
 [Install]
 WantedBy=multi-user.target
