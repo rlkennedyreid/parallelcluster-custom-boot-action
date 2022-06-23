@@ -84,7 +84,7 @@ function configure_docker() {
     systemctl start docker.service
 }
 
-function rebuild_slurm(){
+function rebuild_slurm() {
     # rebuild slurm with slurmrest daemon enabled
 
     # Python3 is requred to build slurm >= 20.02,
