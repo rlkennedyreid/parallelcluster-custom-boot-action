@@ -86,10 +86,6 @@ function install_compute_node_dependencies() {
 }
 
 function configure_slurm_database() {
-    cat > /etc/my.cnf.d/slurmdbd.conf <<EOF
-[mariadb]
-innodb_lock_wait_timeout=900
-EOF
 
     systemctl enable mariadb.service
     systemctl start mariadb.service
@@ -108,7 +104,10 @@ function configure_docker() {
     mkdir -p ${DOCKER_PLUGINS}
     curl -SL ${COMPOSE_BINARY_URL} -o ${DOCKER_PLUGINS}/docker-compose
     chmod +x ${DOCKER_PLUGINS}/docker-compose
-    sudo ln -s ${DOCKER_PLUGINS}/docker-compose /usr/local/bin/docker-compose
+    ln -s ${DOCKER_PLUGINS}/docker-compose /usr/local/bin/docker-compose
+
+    usermod -aG docker ec2-user
+    usermod -aG docker slurm
 
     systemctl enable docker.service
     systemctl start docker.service
