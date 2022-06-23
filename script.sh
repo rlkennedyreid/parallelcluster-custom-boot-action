@@ -12,6 +12,11 @@ slurm_jwt_key="$2"
 cli_tag="$3"
 # GitHub OAuth token - should have read access to UQLE CLI releases, and the UQLE stack repository
 machine_user_token="$4"
+
+
+# global variables
+jwt_key_dir=/var/spool/slurm.state
+jwt_key_file=$jwt_key_dir/jwt_hs256.key
 uqle_api_host="http://10.0.0.18:2323"
 slurmdbd_user="slurm"
 slurmdbd_password="password"
@@ -29,27 +34,12 @@ EOF
 
 }
 
-function compute_node_action() {
-    echo "Running compute node boot action"
-    modify_slurm_conf
-}
-
-function head_node_action() {
-    echo "Running head node boot action"
-
-    systemctl stop slurmctld
-
-    useradd --system --no-create-home -c "slurm rest daemon user" slurmrestd
-
+function install_head_node_dependencies() {
     yum -y update
 
-    rm /var/spool/slurm.state/*
-
-    #####
-    #install pre-requisites
-    #####
     # MariaDB repository setup
     curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --os-type=rhel --os-version=7 --skip-maxscale --skip-tools
+
     yum -y clean all
 
     yum -y install -y epel-release
@@ -64,26 +54,25 @@ function head_node_action() {
     yum -y install docker containerd
     # Install go-task, see https://taskfile.dev/install.sh
     sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
     # cleanup
     yum -y clean all
     rm -rf /var/cache/yum
+}
 
-    #####
-    # set up database
-    #####
-
+function configure_slurm_database() {
     systemctl enable mariadb.service
     systemctl start mariadb.service
 
     mysql --wait -e "CREATE USER '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}'"
     mysql --wait -e "GRANT ALL ON *.* to '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}' with GRANT option"
+}
 
-    #####
-    # set up docker
-    #####
+function configure_docker() {
+    # Install compose and enable docker service
 
-    DOCKER_PLUGINS=/usr/local/lib/docker/cli-plugins
-    COMPOSE_BINARY_URL=https://github.com/docker/compose/releases/download/v2.6.0/docker-compose-linux-x86_64
+    local DOCKER_PLUGINS=/usr/local/lib/docker/cli-plugins
+    local COMPOSE_BINARY_URL=https://github.com/docker/compose/releases/download/v2.6.0/docker-compose-linux-x86_64
 
     # Install docker-compose and make accessible as a cli plugin and a standalone command
     mkdir -p ${DOCKER_PLUGINS}
@@ -91,14 +80,12 @@ function head_node_action() {
     chmod +x ${DOCKER_PLUGINS}/docker-compose
     sudo ln -s ${DOCKER_PLUGINS}/docker-compose /usr/local/bin/docker-compose
 
-    unset DOCKER_PLUGINS COMPOSE_BINARY_URL
-
     systemctl enable docker.service
     systemctl start docker.service
+}
 
-    #####
-    # Update slurm, with slurmrestd
-    #####
+function rebuild_slurm(){
+    # rebuild slurm with slurmrest daemon enabled
 
     # Python3 is requred to build slurm >= 20.02,
     export PYENV_ROOT=/opt/parallelcluster/pyenv
@@ -112,20 +99,14 @@ function head_node_action() {
 
     . .venv/bin/activate
 
-
-    # have to use the exact same slurm version as in the released version of ParallelCluster2.10.1 - 20.02.4
-    # as of May 13, 20.02.4 was removed from schedmd and was replaced with .7
-    # error could be seen in the cfn-init.log file
-    # changelog: change to 20.11.7 from 20.02.7 on 2021/09/03 - pcluster 2.11.2
-    # changelog: change to 20.11.8 from 20.11.7 on 2021/09/16 - pcluster 3
-    # slurm_version=20.11.8
     wget https://download.schedmd.com/slurm/slurm-${slurm_version}.tar.bz2
     tar xjf slurm-${slurm_version}.tar.bz2
     pushd slurm-${slurm_version}
 
 
     CORES=$(grep processor /proc/cpuinfo | wc -l)
-    # config and build slurm
+
+    # configure and build slurm
     ./configure --prefix=/opt/slurm --with-pmix=/opt/pmix --enable-slurmrestd
     make -j $CORES
     make install
@@ -133,10 +114,9 @@ function head_node_action() {
     deactivate
 
     popd && rm -rf slurm-${slurm_version} .venv
+}
 
-    jwt_key_dir=/var/spool/slurm.state
-    jwt_key_file=$jwt_key_dir/jwt_hs256.key
-
+function write_jwt_key_file() {
     # set the jwt key
     if [ ${slurm_jwt_key} ]
     then
@@ -147,13 +127,14 @@ function head_node_action() {
         echo -n ${slurm_jwt_key} > ${jwt_key_file}
     else
         echo "Error: JWT key not present in environment - aborting cluster deployment" >&2
-        exit 1
+        return 1
     fi
 
     chown slurm:slurm $jwt_key_file
     chmod 0600 $jwt_key_file
+}
 
-    modify_slurm_conf
+function create_slurmrest_conf() {
 
     # create the slurmrestd.conf file
     # this file can be owned by root, because the slurmrestd service is run by root
@@ -162,8 +143,11 @@ include /opt/slurm/etc/slurm.conf
 AuthType=auth/jwt
 EOF
 
-# create the slurmdbd.conf file
-cat > /opt/slurm/etc/slurmdbd.conf <<EOF
+}
+
+function create_slurmdb_conf() {
+    # create the slurmdbd.conf file
+    cat > /opt/slurm/etc/slurmdbd.conf <<EOF
 AuthType=auth/munge
 DbdHost=localhost
 DebugLevel=info
@@ -179,14 +163,11 @@ EOF
 
     chown slurm:slurm /opt/slurm/etc/slurmdbd.conf
     chmod 600 /opt/slurm/etc/slurmdbd.conf
+}
 
+function create_slurmrest_service() {
+    useradd --system --no-create-home -c "slurm rest daemon user" slurmrestd
 
-    #####
-    # Enable slurmrestd to run as a service
-    # ExecStart=/opt/slurm/sbin/slurmrestd -vvvv 0.0.0.0:8082 -a jwt -u slurm
-    # slurm20.02.4 version doesn't support -a command line option.
-    #
-    #####
     cat >/etc/systemd/system/slurmrestd.service<<EOF
 [Unit]
 Description=Slurm restd daemon
@@ -201,7 +182,9 @@ ExecStart=/opt/slurm/sbin/slurmrestd -a rest_auth/jwt -s openapi/v0.0.37 -u slur
 [Install]
 WantedBy=multi-user.target
 EOF
+}
 
+function create_slurmdb_service() {
     cat >/etc/systemd/system/slurmdbd.service<<EOF
 [Unit]
 Description=Slurm database daemon
@@ -211,22 +194,22 @@ ConditionPathExists=/opt/slurm/etc/slurmdbd.conf
 
 [Service]
 Environment=SLURM_CONF=/opt/slurm/etc/slurmdbd.conf
-ExecStart=/opt/slurm/sbin/slurmdbd
+ExecStart=/opt/slurm/sbin/slurmdbd -D
 
 [Install]
-WantedBy=multi-user.target slurmctld.service
+WantedBy=multi-user.target
+RequiredBy=slurmctld.service
 EOF
+}
 
-
-    # restart the daemon and start the slurmrestd. must be done after slurmdbd start,
-    # otherwise the cluster won't register
+function reload_and_enable_services() {
     systemctl daemon-reload
     systemctl enable slurmrestd.service slurmdbd.service
     systemctl start slurmrestd.service slurmdbd.service slurmctld.service
+}
 
-    mkdir -p /shared/tmp
-    chown slurm:slurm /shared/tmp
-
+function install_and_run_gitlab_runner() {
+    # Clone UQLE repo and spin up compose service for gitlab runner
     pushd /tmp
     git clone -b dev --depth 1 https://${machine_user_token}@github.com/Perpetual-Labs/uqle.git ./uqle
     pushd uqle
@@ -235,6 +218,49 @@ EOF
     UQLE_CLI_TAG=${cli_tag} UQLE_CLI_TOKEN=${machine_user_token} UQLE_API_HOST=${uqle_api_host} docker-compose --file ./docker-compose-gitlab-runner.yml up --detach --build
 
 }
+
+function head_node_action() {
+    echo "Running head node boot action"
+
+    systemctl stop slurmctld.service
+
+    install_head_node_dependencies
+
+    configure_slurm_database
+
+    rebuild_slurm
+
+    write_jwt_key_file
+
+    modify_slurm_conf
+
+    create_slurmrest_conf
+
+    create_slurmdb_conf
+
+    create_slurmrest_service
+
+    create_slurmdb_service
+
+    reload_and_enable_services
+
+    chown slurm:slurm /shared
+
+    configure_docker
+
+    install_and_run_gitlab_runner
+
+}
+
+function compute_node_action() {
+    echo "Running compute node boot action"
+    systemctl stop slurmd.service
+
+    modify_slurm_conf
+
+    systemctl start slurmd.service
+}
+
 
 . "/etc/parallelcluster/cfnconfig"
 
