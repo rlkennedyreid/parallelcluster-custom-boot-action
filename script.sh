@@ -33,14 +33,22 @@ AccountingStorageType=accounting_storage/slurmdbd
 EOF
 
 }
+function install_docker() {
+    yum -y install docker containerd
+}
+
+function yum_cleanup() {
+    yum -y clean all
+    rm -rf /var/cache/yum
+}
 
 function install_head_node_dependencies() {
-    yum -y update
-
     # MariaDB repository setup
     curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --os-type=rhel --os-version=7 --skip-maxscale --skip-tools
 
-    yum -y clean all
+    yum_cleanup
+
+    yum -y update
 
     yum -y install -y epel-release
     yum-config-manager -y --enable epel
@@ -50,14 +58,23 @@ function install_head_node_dependencies() {
     yum -y install gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
     # mariadb
     yum -y install MariaDB-server
-    # docker
-    yum -y install docker containerd
+
+    install_docker
+
     # Install go-task, see https://taskfile.dev/install.sh
     sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
-    # cleanup
-    yum -y clean all
-    rm -rf /var/cache/yum
+    yum_cleanup
+}
+
+function install_compute_node_dependencies() {
+    yum_cleanup
+
+    yum -y update
+
+    install_docker
+
+    yum_cleanup
 }
 
 function configure_slurm_database() {
@@ -258,11 +275,15 @@ function compute_node_action() {
 
     modify_slurm_conf
 
+    install_compute_node_dependencies
+
+    configure_docker
+
     systemctl start slurmd.service
 }
 
 
-. "/etc/parallelcluster/cfnconfig"
+. /etc/parallelcluster/cfnconfig
 
 echo "Node type: ${cfn_node_type}"
 
