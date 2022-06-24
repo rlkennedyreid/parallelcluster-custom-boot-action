@@ -87,8 +87,7 @@ function install_compute_node_dependencies() {
 
 function configure_slurm_database() {
 
-    systemctl enable mariadb.service
-    systemctl start mariadb.service
+    systemctl enable --now mariadb.service
 
     mysql --wait -e "CREATE USER '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}'"
     mysql --wait -e "GRANT ALL ON *.* to '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}' with GRANT option"
@@ -106,11 +105,13 @@ function configure_docker() {
     chmod +x ${DOCKER_PLUGINS}/docker-compose
     ln -s ${DOCKER_PLUGINS}/docker-compose /usr/local/bin/docker-compose
 
+    groupadd -f -g 387 docker
+    groupmod -g 387 docker
+
     usermod -aG docker ec2-user
     usermod -aG docker slurm
 
-    systemctl enable docker.service
-    systemctl start docker.service
+    systemctl enable --now containerd.service docker.service
 }
 
 function rebuild_slurm() {
@@ -231,8 +232,7 @@ EOF
 
 function reload_and_enable_services() {
     systemctl daemon-reload
-    systemctl enable slurmrestd.service slurmdbd.service
-    systemctl start slurmrestd.service slurmdbd.service slurmctld.service
+    systemctl enable --now slurmrestd.service slurmdbd.service slurmctld.service
 }
 
 function install_and_run_gitlab_runner() {
@@ -248,7 +248,7 @@ function install_and_run_gitlab_runner() {
 function head_node_action() {
     echo "Running head node boot action"
 
-    systemctl stop slurmctld.service
+    systemctl disable --now slurmctld.service
 
     configure_yum
 
