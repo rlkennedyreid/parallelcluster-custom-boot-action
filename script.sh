@@ -282,7 +282,7 @@ function head_node_action() {
 
 function compute_node_action() {
     echo "Running compute node boot action"
-    systemctl stop slurmd.service
+    systemctl disable --now slurmd.service
 
     configure_yum
 
@@ -290,7 +290,7 @@ function compute_node_action() {
 
     configure_docker
 
-    systemctl start slurmd.service
+    systemctl enable --now slurmd.service
 }
 
 
