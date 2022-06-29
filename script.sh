@@ -6,20 +6,20 @@ set -euxo pipefail
 #####
 # Script arguments
 #####
-slurm_version="$1"
-slurm_jwt_key="$2"
+SLURM_VERSION="$1"
+SLURM_JWT_KEY="$2"
 # GitHub release tag for UQLE CLI tool
-cli_tag="$3"
+CLI_TAG="$3"
 # GitHub OAuth token - should have read access to UQLE CLI releases, and the UQLE stack repository
-machine_user_token="$4"
+MACHINE_USER_TOKEN="$4"
+UQLE_API_HOST="$5"
 
 
 # global variables
-jwt_key_dir=/var/spool/slurm.state
-jwt_key_file=$jwt_key_dir/jwt_hs256.key
-uqle_api_host="http://10.0.0.18:2323"
-slurmdbd_user="slurm"
-slurmdbd_password="password"
+JWT_KEY_DIR=/var/spool/slurm.state
+JWT_KEY_FILE=$JWT_KEY_DIR/jwt_hs256.key
+SLURMDBD_USER="slurm"
+SLURM_PASSWORD_FILE=/root/slurmdb.password
 
 function configure_yum() {
     cat >> /etc/yum.conf <<EOF
@@ -84,26 +84,38 @@ function install_compute_node_dependencies() {
 
     yum_cleanup
 }
+function create_and_save_slurmdb_password() {
+    if [[ -e "$SLURM_PASSWORD_FILE" ]]; then
+        echo "Error: create_and_save_slurmdb_password() was called when a password file already exists" >&2
+        return 1
+    fi
+
+    echo -n $(pwmake 128) > $SLURM_PASSWORD_FILE
+}
 
 function configure_slurm_database() {
 
     systemctl enable --now mariadb.service
 
-    mysql --wait -e "CREATE USER '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}'"
-    mysql --wait -e "GRANT ALL ON *.* to '${slurmdbd_user}'@'localhost' identified by '${slurmdbd_password}' with GRANT option"
+    create_and_save_slurmdb_password
+
+    local slurmdbd_password=$(cat "${SLURM_PASSWORD_FILE}")
+
+    mysql --wait -e "CREATE USER '${SLURMDBD_USER}'@'localhost' identified by '${slurmdbd_password}'"
+    mysql --wait -e "GRANT ALL ON *.* to '${SLURMDBD_USER}'@'localhost' identified by '${slurmdbd_password}' with GRANT option"
 }
 
 function configure_docker() {
     # Install compose and enable docker service
 
-    local DOCKER_PLUGINS=/usr/local/lib/docker/cli-plugins
-    local COMPOSE_BINARY_URL=https://github.com/docker/compose/releases/download/v2.6.0/docker-compose-linux-x86_64
+    local docker_plugins=/usr/local/lib/docker/cli-plugins
+    local compose_binary_url=https://github.com/docker/compose/releases/download/v2.6.0/docker-compose-linux-x86_64
 
     # Install docker-compose and make accessible as a cli plugin and a standalone command
-    mkdir -p ${DOCKER_PLUGINS}
-    curl -SL ${COMPOSE_BINARY_URL} -o ${DOCKER_PLUGINS}/docker-compose
-    chmod +x ${DOCKER_PLUGINS}/docker-compose
-    ln -s ${DOCKER_PLUGINS}/docker-compose /usr/local/bin/docker-compose
+    mkdir -p ${docker_plugins}
+    curl -SL ${compose_binary_url} -o ${docker_plugins}/docker-compose
+    chmod +x ${docker_plugins}/docker-compose
+    ln -s ${docker_plugins}/docker-compose /usr/local/bin/docker-compose
 
     groupadd -f -g 387 docker
     groupmod -g 387 docker
@@ -129,9 +141,9 @@ function rebuild_slurm() {
 
     . .venv/bin/activate
 
-    wget https://download.schedmd.com/slurm/slurm-${slurm_version}.tar.bz2
-    tar xjf slurm-${slurm_version}.tar.bz2
-    pushd slurm-${slurm_version}
+    wget https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2
+    tar xjf slurm-${SLURM_VERSION}.tar.bz2
+    pushd slurm-${SLURM_VERSION}
 
 
     # configure and build slurm
@@ -142,25 +154,25 @@ function rebuild_slurm() {
 
     deactivate
 
-    popd && rm -rf slurm-${slurm_version} .venv
+    popd && rm -rf "slurm-${SLURM_VERSION}" .venv
 }
 
 function write_jwt_key_file() {
     # set the jwt key
-    if [ ${slurm_jwt_key} ]
+    if [ ${SLURM_JWT_KEY} ]
     then
         echo "- JWT secret variable found, writing..."
 
-        mkdir -p $jwt_key_dir
+        mkdir -p $JWT_KEY_DIR
 
-        echo -n ${slurm_jwt_key} > ${jwt_key_file}
+        echo -n ${SLURM_JWT_KEY} > ${JWT_KEY_FILE}
     else
         echo "Error: JWT key not present in environment - aborting cluster deployment" >&2
         return 1
     fi
 
-    chown slurm:slurm $jwt_key_file
-    chmod 0600 $jwt_key_file
+    chown slurm:slurm $JWT_KEY_FILE
+    chmod 0600 $JWT_KEY_FILE
 }
 
 function create_slurmrest_conf() {
@@ -174,6 +186,8 @@ EOF
 }
 
 function create_slurmdb_conf() {
+    local slurmdbd_password=$(cat "${SLURM_PASSWORD_FILE}")
+
     # create the slurmdbd.conf file
     cat > /opt/slurm/etc/slurmdbd.conf <<EOF
 AuthType=auth/munge
@@ -182,11 +196,11 @@ DebugLevel=info
 SlurmUser=slurm
 LogFile=/var/log/slurmdbd.log
 StorageType=accounting_storage/mysql
-StorageUser=${slurmdbd_user}
+StorageUser=${SLURMDBD_USER}
 StoragePass=${slurmdbd_password}
 StorageHost=localhost
 AuthAltTypes=auth/jwt
-AuthAltParameters=jwt_key=${jwt_key_file}
+AuthAltParameters=jwt_key=${JWT_KEY_FILE}
 EOF
 
     chown slurm:slurm /opt/slurm/etc/slurmdbd.conf
@@ -238,11 +252,11 @@ function reload_and_enable_services() {
 function install_and_run_gitlab_runner() {
     # Clone UQLE repo and spin up compose service for gitlab runner
     pushd /tmp
-    git clone -b dev --depth 1 https://${machine_user_token}@github.com/Perpetual-Labs/uqle.git ./uqle
+    git clone -b dev --depth 1 https://${MACHINE_USER_TOKEN}@github.com/Perpetual-Labs/uqle.git ./uqle
     pushd uqle
 
     docker network create uqle_network
-    UQLE_CLI_TAG=${cli_tag} UQLE_CLI_TOKEN=${machine_user_token} UQLE_API_HOST=${uqle_api_host} docker-compose --file ./docker-compose-gitlab-runner.yml up --detach --build
+    UQLE_CLI_TAG=${CLI_TAG} UQLE_CLI_TOKEN=${MACHINE_USER_TOKEN} UQLE_API_HOST=${UQLE_API_HOST} docker-compose --file ./docker-compose-gitlab-runner.yml up --detach --build
 }
 
 function head_node_action() {
