@@ -123,7 +123,7 @@ if [[ ! -e $XDG_RUNTIME_DIR/docker.pid ]]; then
 fi
 EOF
 
-    chmod +x script
+    chmod +x $script
 
 }
 
