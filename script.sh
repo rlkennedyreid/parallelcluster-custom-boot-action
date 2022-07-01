@@ -110,15 +110,23 @@ function configure_slurm_database() {
     mysql --wait -e "GRANT ALL ON *.* to '${SLURMDBD_USER}'@'localhost' identified by '${slurmdbd_password}' with GRANT option"
 }
 
+function setup_rootless_docker() {
+    local username = "$1"
+
+    sudo -i -u $username -- dockerd-rootless-setuptool.sh install
+    sudo -i -u $username -- eval "echo 'bash -cl \"dockerd-rootless.sh\" &> /dev/null &' >> ~/.bash_profile"
+    sudo -i -u $username -- eval "echo 'docker context use rootless &> /dev/null' >> ~/.bash_profile"
+}
+
 function configure_docker() {
     systemctl disable --now docker.service docker.socket
 
     echo "user.max_user_namespaces=28633" >> /etc/sysctl.conf
     sysctl --system
 
-    echo 'bash -cl "dockerd-rootless.sh" &> /dev/null &' | tee -a /home/centos/.bash_profile /home/slurm/.bash_profile
-    echo 'docker context use rootless &> /dev/null' | tee -a /home/centos/.bash_profile /home/slurm/.bash_profile
-
+    setup_rootless_docker root
+    setup_rootless_docker centos
+    setup_rootless_docker slurm
 }
 
 function rebuild_slurm() {
@@ -245,6 +253,9 @@ function reload_and_enable_services() {
 }
 
 function install_and_run_gitlab_runner() {
+    # reload shell to load docker context
+    exec ${SHELL} --login
+
     # Clone UQLE repo and spin up compose service for gitlab runner
     pushd /tmp
     git clone -b dev --depth 1 https://${MACHINE_USER_TOKEN}@github.com/Perpetual-Labs/uqle.git ./uqle
@@ -253,6 +264,7 @@ function install_and_run_gitlab_runner() {
     docker network create uqle_network
     UQLE_CLI_TAG=${CLI_TAG} UQLE_CLI_TOKEN=${MACHINE_USER_TOKEN} UQLE_API_HOST=${UQLE_API_HOST} docker-compose --file ./docker-compose-gitlab-runner.yml up --detach --build
 }
+
 
 function head_node_action() {
     echo "Running head node boot action"
