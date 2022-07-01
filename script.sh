@@ -118,7 +118,7 @@ function configure_docker() {
     ln -s ${docker_plugins}/docker-compose /usr/local/bin/docker-compose
 
     groupadd -f -g 387 docker
-    groupmod -g 387 docker
+    groupmod -og 387 docker
 
     usermod -aG docker ec2-user
     usermod -aG docker slurm
