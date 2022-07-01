@@ -294,8 +294,6 @@ function head_node_action() {
 
     systemctl disable --now slurmctld.service
 
-    rm /var/spool/slurm.state/*
-
     configure_yum
 
     install_head_node_dependencies
