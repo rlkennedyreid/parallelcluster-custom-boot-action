@@ -42,7 +42,12 @@ EOF
 }
 
 function install_docker() {
-    yum -q install docker containerd
+    yum -q install yum-utils
+
+    yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+
+    yum -q install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
 }
 
 function yum_cleanup() {
@@ -106,24 +111,13 @@ function configure_slurm_database() {
 }
 
 function configure_docker() {
-    # Install compose and enable docker service
+    systemctl disable --now docker.service docker.socket
 
-    local docker_plugins=/usr/local/lib/docker/cli-plugins
-    local compose_binary_url=https://github.com/docker/compose/releases/download/v2.6.0/docker-compose-linux-x86_64
+    echo "user.max_user_namespaces=28633" >> /etc/sysctl.conf
 
-    # Install docker-compose and make accessible as a cli plugin and a standalone command
-    mkdir -p ${docker_plugins}
-    curl -SL ${compose_binary_url} -o ${docker_plugins}/docker-compose
-    chmod +x ${docker_plugins}/docker-compose
-    ln -s ${docker_plugins}/docker-compose /usr/local/bin/docker-compose
+    echo 'bash -cl "dockerd-rootless.sh" &> /dev/null &' | tee -a /home/centos/.bash_profile /home/slurm/.bash_profile
+    echo 'docker context use rootless &> /dev/null' | tee -a /home/centos/.bash_profile /home/slurm/.bash_profile
 
-    groupadd -f -g 387 docker
-    groupmod -og 387 docker
-
-    usermod -aG docker ec2-user
-    usermod -aG docker slurm
-
-    systemctl enable --now containerd.service docker.service
 }
 
 function rebuild_slurm() {
