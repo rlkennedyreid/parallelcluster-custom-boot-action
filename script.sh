@@ -111,7 +111,7 @@ function configure_slurm_database() {
 }
 
 function setup_rootless_docker() {
-    local username = "$1"
+    local username="$1"
 
     sudo -i -u $username -- dockerd-rootless-setuptool.sh install
     sudo -i -u $username -- eval "echo 'bash -cl \"dockerd-rootless.sh\" &> /dev/null &' >> ~/.bash_profile"
