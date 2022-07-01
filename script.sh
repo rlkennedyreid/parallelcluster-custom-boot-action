@@ -272,7 +272,11 @@ EOF
 
 function reload_and_enable_services() {
     systemctl daemon-reload
-    systemctl enable --now slurmrestd.service slurmdbd.service slurmctld.service
+    systemctl enable --now slurmrestd.service slurmdbd.service
+
+    sacctmgr add cluster parallelcluster
+
+    systemctl enable --now slurmctld.service
 }
 
 function install_and_run_gitlab_runner() {
