@@ -114,6 +114,7 @@ function configure_docker() {
     systemctl disable --now docker.service docker.socket
 
     echo "user.max_user_namespaces=28633" >> /etc/sysctl.conf
+    sysctl --system
 
     echo 'bash -cl "dockerd-rootless.sh" &> /dev/null &' | tee -a /home/centos/.bash_profile /home/slurm/.bash_profile
     echo 'docker context use rootless &> /dev/null' | tee -a /home/centos/.bash_profile /home/slurm/.bash_profile
