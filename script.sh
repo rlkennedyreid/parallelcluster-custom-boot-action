@@ -297,23 +297,23 @@ function head_node_action() {
 
     install_head_node_dependencies
 
-    # configure_slurm_database
+    configure_slurm_database
 
-    # rebuild_slurm
+    rebuild_slurm
 
-    # write_jwt_key_file
+    write_jwt_key_file
 
-    # modify_slurm_conf
+    modify_slurm_conf
 
-    # create_slurmrest_conf
+    create_slurmrest_conf
 
-    # create_slurmdb_conf
+    create_slurmdb_conf
 
-    # create_slurmrest_service
+    create_slurmrest_service
 
-    # create_slurmdb_service
+    create_slurmdb_service
 
-    # reload_and_enable_services
+    reload_and_enable_services
 
     chown slurm:slurm /shared
 
