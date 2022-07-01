@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # https://gist.github.com/mohanpedala/1e2ff5661761d3abd0385e8223e16425#file-bash_strict_mode-md
-set -euo pipefail
+set -euxo pipefail
 
 #####
 # Script arguments
@@ -110,21 +110,39 @@ function configure_slurm_database() {
     mysql --wait -e "GRANT ALL ON *.* to '${SLURMDBD_USER}'@'localhost' identified by '${slurmdbd_password}' with GRANT option"
 }
 
+function create_docker_run_script() {
+
+    local script=/usr/local/bin/run_rootless_docker.sh
+
+    cat > $script <<EOF
+#!/usr/bin/env bash
+
+# run docker daemon if not already running
+if [[ ! -e $XDG_RUNTIME_DIR/docker.pid ]]; then
+    dockerd-rootless.sh &> /dev/null &
+fi
+EOF
+
+    chmod +x script
+
+}
+
 function setup_rootless_docker() {
     local username="$1"
 
     sudo -i -u $username -- dockerd-rootless-setuptool.sh install
-    sudo -i -u $username -- eval "echo 'bash -cl \"dockerd-rootless.sh\" &> /dev/null &' >> ~/.bash_profile"
+    sudo -i -u $username -- eval "echo 'run_rootless_docker.sh' >> ~/.bash_profile"
     sudo -i -u $username -- eval "echo 'docker context use rootless &> /dev/null' >> ~/.bash_profile"
 }
 
 function configure_docker() {
+    create_docker_run_script
+
     systemctl disable --now docker.service docker.socket
 
     echo "user.max_user_namespaces=28633" >> /etc/sysctl.conf
     sysctl --system
 
-    setup_rootless_docker root
     setup_rootless_docker centos
     setup_rootless_docker slurm
 }
@@ -297,7 +315,7 @@ function head_node_action() {
 
     configure_docker
 
-    install_and_run_gitlab_runner
+    # install_and_run_gitlab_runner
 
 }
 
