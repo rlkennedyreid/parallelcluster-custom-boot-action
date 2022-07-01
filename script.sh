@@ -118,7 +118,7 @@ function create_docker_run_script() {
 #!/usr/bin/env bash
 
 # run docker daemon if not already running
-if [[ ! -e $XDG_RUNTIME_DIR/docker.pid ]]; then
+if [[ ! -e \$XDG_RUNTIME_DIR/docker.pid ]]; then
     dockerd-rootless.sh &> /dev/null &
 fi
 EOF
