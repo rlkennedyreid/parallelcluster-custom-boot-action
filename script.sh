@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # https://gist.github.com/mohanpedala/1e2ff5661761d3abd0385e8223e16425#file-bash_strict_mode-md
-set -euxo pipefail
+set -euo pipefail
 
 #####
 # Script arguments
@@ -57,7 +57,7 @@ function yum_cleanup() {
 
 function install_head_node_dependencies() {
     # MariaDB repository setup
-    curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --os-type=rhel --os-version=7 --skip-maxscale --skip-tools
+    curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
 
     yum_cleanup
 
