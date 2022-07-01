@@ -133,8 +133,8 @@ function setup_rootless_docker() {
 
     sudo -i -u $username -- dockerd-rootless-setuptool.sh install
 
-    sudo -i -u $username -- eval "echo 'run_rootless_docker.sh' >> ~/.bash_profile"
-    sudo -i -u $username -- eval "echo 'docker context use rootless &> /dev/null' >> ~/.bash_profile"
+    sudo -i -u $username -- eval "echo 'run_rootless_docker.sh' >> ~/.bashrc"
+    sudo -i -u $username -- eval "echo 'docker context use rootless &> /dev/null' >> ~/.bashrc"
 }
 
 function configure_docker() {
@@ -142,6 +142,7 @@ function configure_docker() {
 
     systemctl disable --now docker.service docker.socket
 
+    # https://docs.docker.com/engine/security/rootless/#prerequisites
     echo "user.max_user_namespaces=28633" >> /etc/sysctl.conf
     sysctl --system
 
