@@ -128,9 +128,11 @@ EOF
 }
 
 function setup_rootless_docker() {
+
     local username="$1"
 
     sudo -i -u $username -- dockerd-rootless-setuptool.sh install
+
     sudo -i -u $username -- eval "echo 'run_rootless_docker.sh' >> ~/.bash_profile"
     sudo -i -u $username -- eval "echo 'docker context use rootless &> /dev/null' >> ~/.bash_profile"
 }
@@ -144,6 +146,8 @@ function configure_docker() {
     sysctl --system
 
     setup_rootless_docker centos
+
+    echo "slurm:165536:65536" | tee -a /etc/subuid /etc/subgid
     setup_rootless_docker slurm
 }
 
