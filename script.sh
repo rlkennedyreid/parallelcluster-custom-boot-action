@@ -274,7 +274,7 @@ function reload_and_enable_services() {
     systemctl daemon-reload
     systemctl enable --now slurmrestd.service slurmdbd.service
 
-    /opt/slurm/sbin/sacctmgr add cluster parallelcluster
+    /opt/slurm/bin/sacctmgr add cluster parallelcluster
 
     systemctl enable --now slurmctld.service
 }
