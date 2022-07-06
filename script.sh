@@ -21,6 +21,10 @@ JWT_KEY_FILE=$JWT_KEY_DIR/jwt_hs256.key
 SLURMDBD_USER="slurm"
 SLURM_PASSWORD_FILE=/root/slurmdb.password
 
+. /etc/parallelcluster/cfnconfig
+
+echo "Node type: ${cfn_node_type}"
+
 function configure_yum() {
     cat >> /etc/yum.conf <<EOF
 assumeyes=1
@@ -132,8 +136,6 @@ function setup_rootless_docker() {
 
     local username="$1"
 
-    sudo -i -u $username -- dockerd-rootless-setuptool.sh install
-
     sudo -i -u $username -- eval "echo 'run_rootless_docker.sh' >> ~/.bashrc"
     sudo -i -u $username -- eval "echo 'docker context use rootless &> /dev/null' >> ~/.bashrc"
 }
@@ -148,10 +150,18 @@ function configure_docker() {
     echo "user.max_user_namespaces=28633" >> /etc/sysctl.conf
     sysctl --system
 
-    setup_rootless_docker centos
-
     echo "slurm:165536:65536" | tee -a /etc/subuid /etc/subgid
-    setup_rootless_docker slurm
+
+    sudo -i -u centos -- dockerd-rootless-setuptool.sh install
+    sudo -i -u slurm -- dockerd-rootless-setuptool.sh install
+
+    # /home is nfs-shared, so only run scripts that modify ~/.bashrc if we're on head node
+    # Otherwise, the changes will be duplicated
+    if [[ "${cfn_node_type}" == "HeadNode" ]]; then
+        setup_rootless_docker centos
+        setup_rootless_docker slurm
+    fi
+
 }
 
 function rebuild_slurm() {
@@ -342,11 +352,6 @@ function compute_node_action() {
     systemctl enable slurmd.service
     systemctl start slurmd.service
 }
-
-
-. /etc/parallelcluster/cfnconfig
-
-echo "Node type: ${cfn_node_type}"
 
 if [[ "${cfn_node_type}" == "HeadNode" ]]; then
     head_node_action
