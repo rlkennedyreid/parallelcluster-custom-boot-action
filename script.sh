@@ -100,7 +100,8 @@ function create_and_save_slurmdb_password() {
 
 function configure_slurm_database() {
 
-    systemctl enable --now mariadb.service
+    systemctl enable mariadb.service
+    systemctl start mariadb.service
 
     create_and_save_slurmdb_password
 
@@ -140,7 +141,8 @@ function setup_rootless_docker() {
 function configure_docker() {
     create_docker_run_script
 
-    systemctl disable --now docker.service docker.socket
+    systemctl disable docker.service docker.socket
+    systemctl stop docker.service docker.socket
 
     # https://docs.docker.com/engine/security/rootless/#prerequisites
     echo "user.max_user_namespaces=28633" >> /etc/sysctl.conf
@@ -272,11 +274,8 @@ EOF
 
 function reload_and_enable_services() {
     systemctl daemon-reload
-    systemctl enable --now slurmrestd.service slurmdbd.service
-
-    /opt/slurm/bin/sacctmgr add cluster parallelcluster
-
-    systemctl enable --now slurmctld.service
+    systemctl enable slurmrestd.service slurmdbd.service slurmctld.service
+    systemctl start slurmrestd.service slurmdbd.service slurmctld.service
 }
 
 function install_and_run_gitlab_runner() {
@@ -296,7 +295,8 @@ function install_and_run_gitlab_runner() {
 function head_node_action() {
     echo "Running head node boot action"
 
-    systemctl disable --now slurmctld.service
+    systemctl disable slurmctld.service
+    systemctl stop slurmctld.service
 
     configure_yum
 
@@ -330,7 +330,8 @@ function head_node_action() {
 
 function compute_node_action() {
     echo "Running compute node boot action"
-    systemctl disable --now slurmd.service
+    systemctl disable slurmd.service
+    systemctl stop slurmd.service
 
     configure_yum
 
@@ -338,7 +339,8 @@ function compute_node_action() {
 
     configure_docker
 
-    systemctl enable --now slurmd.service
+    systemctl enable slurmd.service
+    systemctl start slurmd.service
 }
 
 
