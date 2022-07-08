@@ -219,7 +219,6 @@ EOF
 }
 
 function create_slurmrest_service() {
-    useradd --system --no-create-home -c "slurm rest daemon user" slurmrestd
 
     cat >/etc/systemd/system/slurmrestd.service<<EOF
 [Unit]
@@ -299,6 +298,7 @@ function head_node_action() {
 
     create_slurmdb_conf
 
+    useradd --system --no-create-home -c "slurm rest daemon user" slurmrestd
     create_slurmrest_service
 
     create_slurmdb_service
@@ -316,10 +316,11 @@ function compute_node_action() {
     systemctl disable slurmd.service
     systemctl stop slurmd.service
 
+    configure_users
+
     configure_yum
 
     install_compute_node_dependencies
-
 
     systemctl enable slurmd.service
     systemctl start slurmd.service
