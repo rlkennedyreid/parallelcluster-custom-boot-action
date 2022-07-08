@@ -111,10 +111,7 @@ function configure_slurm_database() {
 function configure_users() {
 
     sysctl user.max_user_namespaces=15000
-    usermod --add-subuids 165536-231071 --add-subgids 165536-231071
-
-    # /home is nfs-shared, so only run scripts that modify ~/.bashrc if we're on head node
-    # Otherwise, the changes will be duplicated
+    usermod --add-subuids 165536-231071 --add-subgids 165536-231071 slurm
 
 }
 
@@ -136,7 +133,6 @@ function rebuild_slurm() {
     wget https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2
     tar xjf slurm-${SLURM_VERSION}.tar.bz2
     pushd slurm-${SLURM_VERSION}
-
 
     # configure and build slurm
     ./configure --silent --prefix=/opt/slurm --with-pmix=/opt/pmix --enable-slurmrestd
