@@ -113,6 +113,29 @@ function configure_users() {
     sysctl user.max_user_namespaces=15000
     usermod --add-subuids 165536-231071 --add-subgids 165536-231071 slurm
 
+    cat << 'EOF' | tee -a /home/centos/.bashrc /home/slurm/.bashrc
+# Set variables to avoid podman conflicts between nodes due to nfs-sharing of /home
+# See basedir-spec at https://specifications.freedesktop.org/
+
+if [ -z "$XDG_RUNTIME_DIR" ]; then
+    XDG_RUNTIME_DIR=/run/user/$(id -u)  # Try systemd default path
+
+    # If this default doesn't exist, create a temporary directory
+    if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+        XDG_RUNTIME_DIR=$(mktemp -d /tmp/$(id -u)-runtime-XXXXXXXXXX)
+    fi
+
+fi
+
+export XDG_RUNTIME_DIR
+export XDG_DATA_HOME=$XDG_RUNTIME_DIR/.local/share
+export XDG_STATE_HOME=$XDG_RUNTIME_DIR/.state
+export XDG_CACHE_HOME=$XDG_RUNTIME_DIR/.cache
+
+# Config files can remain common to all nodes
+export XDG_CONFIG_HOME=$HOME/.config
+
+EOF
 }
 
 function rebuild_slurm() {
