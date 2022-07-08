@@ -111,8 +111,7 @@ function configure_slurm_database() {
 function configure_users() {
 
     sysctl user.max_user_namespaces=15000
-
-    usermod --add-subuids 165536-65536 --add-subgids 165536-65536
+    usermod --add-subuids 165536-231071 --add-subgids 165536-231071
 
     # /home is nfs-shared, so only run scripts that modify ~/.bashrc if we're on head node
     # Otherwise, the changes will be duplicated
